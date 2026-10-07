@@ -1,4 +1,4 @@
-# obrol
+# ZPAi
 
 Chat ke model AI pakai API key sendiri. Satu halaman HTML, nggak ada server,
 nggak ada build step. Key dan riwayat obrolan cuma nyimpen di browser lu.

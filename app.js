@@ -56,9 +56,9 @@ const PROVIDERS = {
 };
 
 const STORE = {
-  settings: 'obrol.settings',
-  thread: 'obrol.thread',
-  key: (p) => `obrol.key.${p}`,
+  settings: 'zpai.settings',
+  thread: 'zpai.thread',
+  key: (p) => `zpai.key.${p}`,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -266,7 +266,7 @@ function buildRequest(s, messages) {
 
   const headers = { 'content-type': 'application/json' };
   if (s.apiKey) headers.authorization = `Bearer ${s.apiKey}`;
-  if (s.provider === 'openrouter') headers['x-title'] = 'obrol';
+  if (s.provider === 'openrouter') headers['x-title'] = 'ZPAi';
   return {
     url: `${base}/chat/completions`,
     init: {
