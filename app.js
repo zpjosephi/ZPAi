@@ -551,6 +551,13 @@ function stop() {
 
 // ---------- test connection ----------
 
+// Enough to compare against the dashboard's "sk-...abcd" listing, never the whole key.
+function keyFingerprint(key) {
+  if (!key) return 'kosong';
+  const head = key.slice(0, Math.min(8, key.length - 4));
+  return `${head}...${key.slice(-4)} (${key.length} karakter)`;
+}
+
 async function testConnection() {
   const problem = ready();
   if (problem) {
@@ -584,7 +591,7 @@ async function testConnection() {
     el.testResult.textContent = 'Key diterima. Siap dipakai.';
     el.testResult.className = 'test-result ok';
   } catch (err) {
-    el.testResult.textContent = networkError(err) || 'Gagal.';
+    el.testResult.textContent = `${networkError(err) || 'Gagal.'} Key yang dikirim: ${keyFingerprint(s.apiKey)}.`;
     el.testResult.className = 'test-result bad';
   } finally {
     el.test.removeAttribute('aria-busy');
