@@ -125,7 +125,8 @@ function settings() {
   return {
     provider: el.provider.value,
     baseUrl: el.baseUrl.value.trim(),
-    apiKey: el.apiKey.value.trim(),
+    // keys copied from a wrapped terminal or email arrive with line breaks inside
+    apiKey: el.apiKey.value.replace(/\s+/g, ''),
     remember: el.remember.checked,
     model: el.model.value.trim(),
     system: el.system.value.trim(),
@@ -609,6 +610,12 @@ function init() {
   for (const f of [el.baseUrl, el.apiKey, el.model, el.system]) {
     f.addEventListener('input', persistSettings);
   }
+  el.apiKey.addEventListener('paste', () => {
+    setTimeout(() => {
+      const clean = el.apiKey.value.replace(/\s+/g, '');
+      if (clean !== el.apiKey.value) { el.apiKey.value = clean; persistSettings(); }
+    }, 0);
+  });
   el.remember.addEventListener('change', persistSettings);
 
   el.eye.addEventListener('click', () => {
