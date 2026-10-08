@@ -275,27 +275,53 @@ input[type="search"]::-webkit-search-cancel-button { appearance: none; }
 .app {
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--settings-w);
+  /* one explicit row so tall panel content scrolls inside the panel instead of growing the page */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   position: relative;
+  transition: grid-template-columns var(--t-slow) var(--ease-out);
 }
+
+/* collapsed side columns shrink to 0; children keep their width so text does
+   not reflow mid-animation, and visibility drops once the column is gone */
+.history-collapsed .app { grid-template-columns: 0 minmax(0, 1fr) var(--settings-w); }
+.settings-collapsed .app { grid-template-columns: var(--rail-w) minmax(0, 1fr) 0; }
+.history-collapsed.settings-collapsed .app { grid-template-columns: 0 minmax(0, 1fr) 0; }
 
 .panel {
   display: flex; flex-direction: column;
   min-height: 0;
+  /* containing block for absolutely positioned helpers (the sr-only file input)
+     so they stay clipped inside the panel instead of stretching the page */
+  position: relative;
   background: var(--surface);
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
+  transition: visibility 0s;
 }
 .panel-history { border-right: 1px solid var(--line); }
 .panel-settings { border-left: 1px solid var(--line); }
+.panel-history > * { width: calc(var(--rail-w) - 1px); flex: none; }
+.panel-settings > * { width: calc(var(--settings-w) - 1px); flex: none; }
+.history-collapsed .panel-history, .settings-collapsed .panel-settings {
+  visibility: hidden;
+  border-width: 0;
+  transition: visibility 0s linear var(--t-slow);
+}
 
 .panel-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: var(--space-4) var(--space-3) var(--space-2) var(--space-4);
   flex: none;
 }
 .panel-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
 .drawer-close { display: none; }
+
+/* top bar buttons: shown as "bring the column back" when it is collapsed,
+   and as drawer toggles on narrow screens (media queries below) */
+.panel-toggle { display: none; }
+.history-collapsed #btn-history, .settings-collapsed #btn-settings { display: inline-grid; }
 
 .chat {
   display: grid;
@@ -624,11 +650,13 @@ input[type="search"]::-webkit-search-cancel-button { appearance: none; }
 
 /* ---------- responsive ---------- */
 
-.drawer-toggle { display: none; }
-
 @media (max-width: 1179px) {
-  .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+  .app, .settings-collapsed .app { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+  .history-collapsed .app, .history-collapsed.settings-collapsed .app { grid-template-columns: 0 minmax(0, 1fr); }
   #btn-settings { display: inline-grid; }
+  .panel-settings .panel-collapse { display: none; }
+  .panel-settings > * { width: auto; }
+  .settings-collapsed .panel-settings { border-width: 1px; }
 
   .panel-settings {
     position: fixed; top: var(--top-h); right: 0; bottom: 0;
@@ -639,15 +667,19 @@ input[type="search"]::-webkit-search-cancel-button { appearance: none; }
     transform: translateX(100%);
     transition: transform var(--t-slow) var(--ease-out), visibility 0s linear var(--t-slow);
   }
-  .panel-settings.is-open { visibility: visible; transform: none; transition: transform var(--t-slow) var(--ease-out), visibility 0s; }
+  .panel-settings.is-open, .settings-collapsed .panel-settings.is-open { visibility: visible; transform: none; transition: transform var(--t-slow) var(--ease-out), visibility 0s; }
+  .settings-collapsed .panel-settings:not(.is-open) { visibility: hidden; }
   .panel-settings .drawer-close { display: inline-grid; }
 }
 
 @media (max-width: 759px) {
   :root { --gutter: 16px; }
 
-  .app { grid-template-columns: minmax(0, 1fr); }
+  .app, .history-collapsed .app, .settings-collapsed .app, .history-collapsed.settings-collapsed .app { grid-template-columns: minmax(0, 1fr); }
   #btn-history { display: inline-grid; }
+  .panel-history .panel-collapse { display: none; }
+  .panel-history > * { width: auto; }
+  .history-collapsed .panel-history { border-width: 0; }
   .top { gap: var(--space-2); }
   .top-brand { padding-left: 2px; }
   .top-status { font-size: var(--text-xs); }
@@ -662,7 +694,8 @@ input[type="search"]::-webkit-search-cancel-button { appearance: none; }
     transform: translateX(-100%);
     transition: transform var(--t-slow) var(--ease-out), visibility 0s linear var(--t-slow);
   }
-  .panel-history.is-open { visibility: visible; transform: none; transition: transform var(--t-slow) var(--ease-out), visibility 0s; }
+  .panel-history.is-open, .history-collapsed .panel-history.is-open { visibility: visible; transform: none; transition: transform var(--t-slow) var(--ease-out), visibility 0s; }
+  .history-collapsed .panel-history:not(.is-open) { visibility: hidden; }
   .panel-history .drawer-close { display: inline-grid; }
 
   .msg.user .msg-body { max-width: 92%; }
@@ -673,7 +706,7 @@ input[type="search"]::-webkit-search-cancel-button { appearance: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-delay: 0s !important; }
   .caret { animation: none; }
   .panel-settings, .panel-history { transform: none; }
 }

@@ -22,6 +22,9 @@ Provider yang didukung:
 - Pemakaian token per jawaban (bisa dimatikan di pengaturan).
 - Export semua obrolan ke JSON dan import lagi di browser lain. Key nggak ikut.
 - Tema terang, gelap, atau ikut sistem.
+- Bahasa antarmuka: English (default) atau Indonesia. Nambah bahasa lain
+  cukup nambah satu kamus di `i18n.js`.
+- Panel kiri dan kanan bisa dilipat di layar lebar, jadi drawer di layar sempit.
 - Markdown: code block, tabel, list bersarang, kutipan.
 
 ## Jalanin
@@ -44,6 +47,7 @@ Terus buka http://localhost:8080.
 ## File
 
 - `index.html` markup dan ikon SVG
+- `i18n.js` kamus string antarmuka per bahasa
 - `style.css` token warna (OKLCH, `light-dark()`), layout, komponen
 - `markdown.js` renderer markdown kecil buat jawaban model
 - `providers.js` katalog provider, pembentuk request, parser event SSE

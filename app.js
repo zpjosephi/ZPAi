@@ -4,7 +4,8 @@
 // provider the user picked, with the key they pasted.
 
 (function () {
-  const { providers, store, markdown } = ZP;
+  const { providers, store, markdown, i18n } = ZP;
+  const { t } = i18n;
   const PROVIDERS = providers.list;
 
   const CUSTOM_MODEL = '__custom';
@@ -12,9 +13,11 @@
   const UNDO_MS = 7_000;
   const SETTINGS_DRAWER = window.matchMedia('(max-width: 1179px)');
   const HISTORY_DRAWER = window.matchMedia('(max-width: 759px)');
+  const REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const $ = (id) => document.getElementById(id);
   const el = {
+    root: document.documentElement,
     app: $('app'),
     status: $('top-status'),
     themeBtn: $('btn-theme'),
@@ -52,6 +55,7 @@
     system: $('system'),
     matchTone: $('match-tone'),
     showUsage: $('show-usage'),
+    language: $('language'),
     test: $('btn-test'),
     testResult: $('test-result'),
     exportBtn: $('btn-export'),
@@ -74,21 +78,40 @@
   let pendingUndo = null;   // { finalize } for the toast with an undo button
   let toastTimer = null;
   let hintTimer = null;
+  let collapsed = { history: false, settings: false };
 
-  const fmtInt = new Intl.NumberFormat('id-ID');
-  const fmtTime = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' });
-  const fmtDate = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' });
-  const fmtFull = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  let fmt = null;
+  function buildFormatters() {
+    const loc = i18n.locale;
+    fmt = {
+      int: new Intl.NumberFormat(loc),
+      time: new Intl.DateTimeFormat(loc, { hour: '2-digit', minute: '2-digit' }),
+      date: new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'short' }),
+      full: new Intl.DateTimeFormat(loc, { dateStyle: 'medium', timeStyle: 'short' }),
+    };
+  }
 
   // ---------- settings ----------
 
   function fillProviders() {
+    el.provider.replaceChildren();
     for (const [id, p] of Object.entries(PROVIDERS)) {
       const opt = document.createElement('option');
       opt.value = id;
-      opt.textContent = p.name;
+      opt.textContent = p.nameKey ? t(p.nameKey) : p.name;
       el.provider.appendChild(opt);
     }
+  }
+
+  function fillLanguages() {
+    el.language.replaceChildren();
+    for (const { code, name } of i18n.languages) {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = name;
+      el.language.appendChild(opt);
+    }
+    el.language.value = i18n.lang;
   }
 
   function currentModel() {
@@ -106,6 +129,7 @@
       model: currentModel(),
       system: el.system.value.trim(),
       matchTone: el.matchTone.checked,
+      toneNote: t('tone_note'),
       showUsage: el.showUsage.checked,
     };
   }
@@ -135,7 +159,7 @@
     }
     const other = document.createElement('option');
     other.value = CUSTOM_MODEL;
-    other.textContent = 'Model lain...';
+    other.textContent = t('other_model');
     el.model.appendChild(other);
 
     el.modelWrap.hidden = p.models.length === 0;
@@ -163,7 +187,7 @@
     const id = el.provider.value;
     const p = PROVIDERS[id];
     el.fieldBase.hidden = !p.editableBase;
-    el.apiKey.placeholder = p.placeholder;
+    el.apiKey.placeholder = p.placeholderKey ? t(p.placeholderKey) : p.placeholder;
     el.apiKey.value = store.keys.load(id);
     el.remember.checked = store.keys.remembered(id);
     el.keyLink.hidden = !p.keyUrl;
@@ -186,26 +210,29 @@
       el.showUsage.checked = true;
     }
     applyTheme(saved.theme || 'system');
+    collapsed = { history: saved.panels?.history === false, settings: saved.panels?.settings === false };
+    applyCollapsed();
   }
 
   function updateStatus() {
     const s = settings();
     const p = PROVIDERS[s.provider];
+    const name = p.nameKey ? t(p.nameKey) : p.name;
     if (!p.optionalKey && !s.apiKey) {
-      el.status.textContent = `${p.name}: belum ada key`;
+      el.status.textContent = t('status_nokey', { provider: name });
     } else if (!s.model) {
-      el.status.textContent = `${p.name}: pilih model dulu`;
+      el.status.textContent = t('status_nomodel', { provider: name });
     } else {
-      el.status.textContent = `${p.name} · ${s.model}`;
+      el.status.textContent = `${name} · ${s.model}`;
     }
   }
 
   function ready() {
     const s = settings();
     const p = PROVIDERS[s.provider];
-    if (p.editableBase && !s.baseUrl) return { msg: 'Isi base URL dulu di Pengaturan.', field: el.baseUrl };
-    if (!p.optionalKey && !s.apiKey) return { msg: 'Tempel API key dulu di Pengaturan.', field: el.apiKey };
-    if (!s.model) return { msg: 'Pilih model dulu di Pengaturan.', field: el.modelWrap.hidden ? el.modelCustom : el.model };
+    if (p.editableBase && !s.baseUrl) return { msg: t('need_base'), field: el.baseUrl };
+    if (!p.optionalKey && !s.apiKey) return { msg: t('need_key'), field: el.apiKey };
+    if (!s.model) return { msg: t('need_model'), field: el.modelWrap.hidden ? el.modelCustom : el.model };
     return null;
   }
 
@@ -214,33 +241,60 @@
     el.testResult.className = state ? `test-result ${state}` : 'test-result';
   }
 
+  // ---------- language ----------
+
+  function applyLanguage(lang) {
+    i18n.set(lang);
+    buildFormatters();
+    i18n.apply();
+    fillProviders();
+    fillLanguages();
+    el.provider.value = store.settings.get().provider || el.provider.value;
+    el.eye.setAttribute('aria-label', t(el.apiKey.type === 'password' ? 'show_key' : 'hide_key'));
+    el.send.setAttribute('aria-label', t(controller ? 'stop' : 'send'));
+    el.hint.textContent = t('hint');
+    if (el.test.getAttribute('aria-busy') !== 'true') el.test.textContent = t('test');
+  }
+
+  function switchLanguage(lang) {
+    const s = settings();
+    applyLanguage(lang);
+    store.settings.set({ lang: i18n.lang });
+    const p = PROVIDERS[s.provider];
+    el.apiKey.placeholder = p.placeholderKey ? t(p.placeholderKey) : p.placeholder;
+    fillModels(p, s.model);
+    applyTheme(theme);
+    applyCollapsed();
+    updateStatus();
+    renderHistory();
+    renderThread();
+  }
+
   // ---------- theme ----------
 
   const THEMES = ['system', 'light', 'dark'];
-  const THEME_LABEL = { system: 'ikut sistem', light: 'terang', dark: 'gelap' };
   const THEME_ICON = { system: '#i-monitor', light: '#i-sun', dark: '#i-moon' };
   let theme = 'system';
 
   function applyTheme(next) {
     theme = THEMES.includes(next) ? next : 'system';
-    if (theme === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
+    if (theme === 'system') delete el.root.dataset.theme;
+    else el.root.dataset.theme = theme;
     el.themeIcon.setAttribute('href', THEME_ICON[theme]);
-    el.themeBtn.setAttribute('aria-label', `Tema: ${THEME_LABEL[theme]}`);
+    el.themeBtn.setAttribute('aria-label', t('theme_label', { name: t(`theme_${theme}`) }));
   }
 
   // per-component color transitions would make buttons lag behind the page
   // for a frame or two, so they are paused while the whole theme flips
   function cycleTheme() {
-    const root = document.documentElement;
-    root.classList.add('no-transitions');
+    el.root.classList.add('no-transitions');
     applyTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
     store.settings.set({ theme });
-    toast(`Tema ${THEME_LABEL[theme]}`);
-    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-transitions')));
+    toast(t('theme_toast', { name: t(`theme_${theme}`) }));
+    requestAnimationFrame(() => requestAnimationFrame(() => el.root.classList.remove('no-transitions')));
   }
 
-  // ---------- drawers (history on phones, settings below desktop width) ----------
+  // ---------- panels: collapsible columns on wide screens, drawers below ----------
 
   function isDrawer(name) {
     return name === 'history' ? HISTORY_DRAWER.matches : SETTINGS_DRAWER.matches;
@@ -249,8 +303,28 @@
   function panelFor(name) { return name === 'history' ? el.history : el.settings; }
   function toggleFor(name) { return name === 'history' ? el.historyBtn : el.settingsBtn; }
 
+  function applyCollapsed() {
+    el.root.classList.toggle('history-collapsed', collapsed.history);
+    el.root.classList.toggle('settings-collapsed', collapsed.settings);
+    for (const name of ['history', 'settings']) {
+      if (!isDrawer(name)) toggleFor(name).setAttribute('aria-expanded', String(!collapsed[name]));
+    }
+  }
+
+  function setCollapsed(name, value) {
+    collapsed[name] = value;
+    applyCollapsed();
+    store.settings.set({ panels: { history: !collapsed.history, settings: !collapsed.settings } });
+    if (value) toggleFor(name).focus();
+    else panelFor(name).querySelector('input, select, textarea, button:not(.drawer-close):not(.panel-collapse)')?.focus();
+  }
+
   function openDrawer(name) {
-    if (!isDrawer(name)) { panelFor(name).querySelector('input, select, textarea, button:not(.drawer-close)')?.focus(); return; }
+    if (!isDrawer(name)) {
+      if (collapsed[name]) setCollapsed(name, false);
+      else panelFor(name).querySelector('input, select, textarea, button:not(.drawer-close):not(.panel-collapse)')?.focus();
+      return;
+    }
     if (openDrawerName && openDrawerName !== name) closeDrawer(false);
     openDrawerName = name;
     drawerReturnFocus = document.activeElement;
@@ -260,7 +334,7 @@
     toggleFor(name).setAttribute('aria-expanded', 'true');
     el.chat.inert = true;
     panelFor(name === 'history' ? 'settings' : 'history').inert = true;
-    panel.querySelector('input, select, textarea, button:not(.drawer-close)')?.focus();
+    panel.querySelector('input, select, textarea, button:not(.drawer-close):not(.panel-collapse)')?.focus();
   }
 
   function closeDrawer(restoreFocus = true) {
@@ -277,14 +351,23 @@
     drawerReturnFocus = null;
   }
 
-  function toggleDrawer(name) {
-    if (openDrawerName === name) closeDrawer();
-    else openDrawer(name);
+  // top bar button: opens the drawer on small screens, re-expands a collapsed column on wide ones
+  function togglePanel(name) {
+    if (isDrawer(name)) {
+      if (openDrawerName === name) closeDrawer();
+      else openDrawer(name);
+    } else {
+      setCollapsed(name, !collapsed[name]);
+    }
   }
 
   // A panel that stops being a drawer (window grew) must not stay in drawer state.
   function syncDrawers() {
     if (openDrawerName && !isDrawer(openDrawerName)) closeDrawer(false);
+    for (const name of ['history', 'settings']) {
+      if (isDrawer(name)) toggleFor(name).setAttribute('aria-expanded', String(openDrawerName === name));
+    }
+    applyCollapsed();
   }
 
   // ---------- toast ----------
@@ -324,22 +407,28 @@
 
   function groupLabel(ts) {
     const d = dayDiff(ts);
-    if (d <= 0) return 'Hari ini';
-    if (d === 1) return 'Kemarin';
-    if (d < 7) return '7 hari terakhir';
-    if (d < 30) return '30 hari terakhir';
-    return 'Lebih lama';
+    if (d <= 0) return t('group_today');
+    if (d === 1) return t('group_yesterday');
+    if (d < 7) return t('group_week');
+    if (d < 30) return t('group_month');
+    return t('group_older');
   }
 
   function relTime(ts) {
     const diff = Date.now() - ts;
     const min = Math.round(diff / 60_000);
-    if (min < 1) return 'baru saja';
-    if (min < 60) return `${min} mnt lalu`;
+    if (min < 1) return t('rel_now');
+    if (min < 60) return t('rel_min', { n: min });
     const h = Math.round(min / 60);
-    if (h < 24 && dayDiff(ts) === 0) return `${h} jam lalu`;
-    if (dayDiff(ts) === 1) return 'kemarin';
-    return fmtDate.format(ts);
+    if (h < 24 && dayDiff(ts) === 0) return t('rel_hour', { n: h });
+    if (dayDiff(ts) === 1) return t('rel_yesterday');
+    return fmt.date.format(ts);
+  }
+
+  function providerName(id) {
+    const p = PROVIDERS[id];
+    if (!p) return '';
+    return p.nameKey ? t(p.nameKey) : p.name;
   }
 
   function renderHistory() {
@@ -351,9 +440,7 @@
 
     el.historyList.replaceChildren();
     el.historyEmpty.hidden = list.length > 0;
-    el.historyEmpty.textContent = all.length === 0
-      ? 'Belum ada obrolan tersimpan. Pesan pertama kamu bakal muncul di sini.'
-      : 'Nggak ada obrolan yang cocok.';
+    el.historyEmpty.textContent = all.length === 0 ? t('history_empty') : t('history_nomatch');
     if (!list.length) return;
 
     let group = null;
@@ -385,14 +472,15 @@
     const title = node.querySelector('.chat-title');
     const meta = node.querySelector('.chat-meta');
     title.textContent = e.title;
-    meta.textContent = `${e.model || PROVIDERS[e.provider]?.name || ''} · ${relTime(e.updatedAt)}`;
+    meta.textContent = `${e.model || providerName(e.provider)} · ${relTime(e.updatedAt)}`;
     open.title = e.title;
+    open.setAttribute('aria-label', `${t('open_chat')}: ${e.title}`);
     if (chat && chat.id === e.id) {
       node.classList.add('is-active');
       open.setAttribute('aria-current', 'page');
     }
-    node.querySelector('.chat-rename').setAttribute('aria-label', `Ganti nama "${e.title}"`);
-    node.querySelector('.chat-delete').setAttribute('aria-label', `Hapus "${e.title}"`);
+    node.querySelector('.chat-rename').setAttribute('aria-label', t('rename_chat', { title: e.title }));
+    node.querySelector('.chat-delete').setAttribute('aria-label', t('delete_chat', { title: e.title }));
 
     open.addEventListener('click', () => { openChat(e.id); if (isDrawer('history')) closeDrawer(false); });
     node.querySelector('.chat-rename').addEventListener('click', () => startRename(node, e));
@@ -407,7 +495,7 @@
     input.className = 'chat-rename-input';
     input.value = e.title;
     input.maxLength = 96;
-    input.setAttribute('aria-label', 'Nama obrolan');
+    input.setAttribute('aria-label', t('chat_name'));
     node.classList.add('is-renaming');
     open.replaceWith(input);
     input.focus();
@@ -438,8 +526,8 @@
     const wasActive = chat && chat.id === id;
     if (wasActive) startNew({ silent: true });
     renderHistory();
-    toast(`"${snapshot.title}" dihapus.`, {
-      action: 'Urungkan',
+    toast(t('deleted', { title: snapshot.title }), {
+      action: t('undo'),
       onAction: () => {
         store.chats.restore(snapshot);
         renderHistory();
@@ -450,12 +538,12 @@
 
   function clearAll() {
     const snapshot = store.exportAll().chats;
-    if (!snapshot.length) { toast('Belum ada obrolan yang bisa dihapus.'); return; }
+    if (!snapshot.length) { toast(t('nothing_to_delete')); return; }
     store.chats.clearAll();
     startNew({ silent: true });
     renderHistory();
-    toast(`${snapshot.length} obrolan dihapus.`, {
-      action: 'Urungkan',
+    toast(snapshot.length === 1 ? t('deleted_one') : t('deleted_many', { n: snapshot.length }), {
+      action: t('undo'),
       onAction: () => {
         for (const c of snapshot) store.chats.restore(c);
         renderHistory();
@@ -484,7 +572,7 @@
 
   function openChat(id) {
     const next = store.chats.get(id);
-    if (!next) { toast('Obrolan itu sudah nggak ada.'); renderHistory(); return; }
+    if (!next) { toast(t('chat_gone')); renderHistory(); return; }
     cancelEdit();
     chat = next;
     store.chats.setActive(id);
@@ -493,7 +581,7 @@
   }
 
   function saveChat(c) {
-    if (!store.chats.save(c)) return;
+    if (!store.chats.save(c, t('untitled'))) return;
     if (c === chat) store.chats.setActive(c.id);
   }
 
@@ -502,8 +590,8 @@
   function fmtUsage(u) {
     if (!u || (u.input == null && u.output == null)) return '';
     const parts = [];
-    if (u.input != null) parts.push(`${fmtInt.format(u.input)} masuk`);
-    if (u.output != null) parts.push(`${fmtInt.format(u.output)} keluar`);
+    if (u.input != null) parts.push(t('usage_in', { n: fmt.int.format(u.input) }));
+    if (u.output != null) parts.push(t('usage_out', { n: fmt.int.format(u.output) }));
     return parts.join(' · ');
   }
 
@@ -536,10 +624,11 @@
   }
 
   function stopNotice(m, isLast) {
-    if (m.stop === 'length') return notice('Jawaban berhenti di batas token.', isLast ? 'Lanjutkan' : '', continueReply);
-    if (m.stop === 'refusal') return notice(`Model menolak melanjutkan${m.stopDetail ? ` (${m.stopDetail})` : ''}.`);
-    if (m.stop === 'filter') return notice(`Dihentikan filter konten provider${m.stopDetail ? ` (${m.stopDetail})` : ''}.`);
-    if (m.stop === 'aborted') return notice('Dihentikan.');
+    const detail = m.stopDetail ? ` (${m.stopDetail})` : '';
+    if (m.stop === 'length') return notice(t('notice_length'), isLast ? t('continue') : '', continueReply);
+    if (m.stop === 'refusal') return notice(t('notice_refusal', { detail }));
+    if (m.stop === 'filter') return notice(t('notice_filter', { detail }));
+    if (m.stop === 'aborted') return notice(t('notice_aborted'));
     return null;
   }
 
@@ -552,10 +641,10 @@
     const usage = node.querySelector('.msg-usage');
     const actions = node.querySelector('.msg-actions');
 
-    who.textContent = m.role === 'user' ? 'Kamu' : (m.model || chat?.model || 'AI');
+    who.textContent = m.role === 'user' ? t('you') : (m.model || chat?.model || 'AI');
     if (m.at) {
-      time.textContent = fmtTime.format(m.at);
-      time.title = fmtFull.format(m.at);
+      time.textContent = fmt.time.format(m.at);
+      time.title = fmt.full.format(m.at);
       time.dateTime = new Date(m.at).toISOString();
     }
 
@@ -567,14 +656,14 @@
 
     if (m.role === 'assistant') {
       if (el.showUsage.checked) usage.textContent = fmtUsage(m.usage);
-      actions.appendChild(iconButton('#i-copy', 'Salin jawaban', 'msg-copy', (ev) => copyText(ev.currentTarget, m.content)));
-      if (isLast && !streaming) actions.appendChild(iconButton('#i-refresh', 'Ulangi jawaban', '', regenerate));
+      actions.appendChild(iconButton('#i-copy', t('copy_reply'), 'msg-copy', (ev) => copyText(ev.currentTarget, m.content)));
+      if (isLast && !streaming) actions.appendChild(iconButton('#i-refresh', t('regenerate'), '', regenerate));
       const n = stopNotice(m, isLast && !streaming);
       if (n) node.querySelector('.msg-foot').before(n);
     } else {
-      actions.appendChild(iconButton('#i-copy', 'Salin pesan', 'msg-copy', (ev) => copyText(ev.currentTarget, m.content)));
+      actions.appendChild(iconButton('#i-copy', t('copy_msg'), 'msg-copy', (ev) => copyText(ev.currentTarget, m.content)));
       const lastUser = index != null && chat && chat.messages.slice(index + 1).every((x) => x.role !== 'user');
-      if (lastUser && !streaming) actions.appendChild(iconButton('#i-pencil', 'Edit pesan', '', () => editMessage(index)));
+      if (lastUser && !streaming) actions.appendChild(iconButton('#i-pencil', t('edit_msg'), '', () => editMessage(index)));
     }
 
     el.thread.appendChild(node);
@@ -584,7 +673,7 @@
   function addError(text, { retry } = {}) {
     const node = el.tplMsg.content.firstElementChild.cloneNode(true);
     node.classList.add('error');
-    node.querySelector('.msg-who').textContent = 'Gagal';
+    node.querySelector('.msg-who').textContent = t('failed');
     node.querySelector('.msg-body').textContent = text;
     node.querySelector('.msg-time').remove();
     const actions = node.querySelector('.msg-actions');
@@ -592,7 +681,7 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn btn-sm';
-      b.textContent = 'Coba lagi';
+      b.textContent = t('retry');
       b.addEventListener('click', () => { node.remove(); retry(); });
       actions.appendChild(b);
     }
@@ -608,14 +697,14 @@
       const use = btn.querySelector('use');
       use.setAttribute('href', '#i-check');
       btn.classList.add('copied');
-      btn.setAttribute('aria-label', 'Tersalin');
+      btn.setAttribute('aria-label', t('copied'));
       setTimeout(() => {
         use.setAttribute('href', '#i-copy');
         btn.classList.remove('copied');
-        btn.setAttribute('aria-label', 'Salin');
+        btn.setAttribute('aria-label', t('copy'));
       }, 1500);
     } catch {
-      toast('Clipboard nggak bisa diakses. Blok teksnya manual aja.');
+      toast(t('clipboard_fail'));
     }
   }
 
@@ -655,7 +744,7 @@
     el.hint.textContent = text;
     el.hint.classList.add('is-flash');
     hintTimer = setTimeout(() => {
-      el.hint.textContent = 'Enter kirim, Shift+Enter baris baru, Esc stop.';
+      el.hint.textContent = t('hint');
       el.hint.classList.remove('is-flash');
     }, 3000);
   }
@@ -682,7 +771,7 @@
 
   function setStreaming(on) {
     el.composer.classList.toggle('is-streaming', on);
-    el.send.setAttribute('aria-label', on ? 'Stop' : 'Kirim');
+    el.send.setAttribute('aria-label', t(on ? 'stop' : 'send'));
     el.newChat.disabled = on;
   }
 
@@ -693,26 +782,15 @@
       const j = JSON.parse(text);
       msg = j.error?.message || j.message || (typeof j.error === 'string' ? j.error : '');
     } catch {}
-    if (!msg) msg = text.slice(0, 300) || response.statusText || 'tanpa pesan';
-    const hints = {
-      400: 'Cek nama model dan isi permintaan.',
-      401: 'Key salah atau sudah dicabut.',
-      402: 'Saldo atau kredit di provider habis.',
-      403: 'Key ini nggak punya akses ke model itu.',
-      404: 'Model atau endpoint nggak ketemu. Cek nama modelnya.',
-      429: 'Kena rate limit atau kuota habis. Tunggu sebentar lalu coba lagi.',
-      500: 'Provider lagi bermasalah. Coba lagi beberapa saat.',
-      529: 'Provider lagi kelebihan beban. Coba lagi beberapa saat.',
-    };
-    const hint = hints[response.status] ? ` ${hints[response.status]}` : '';
-    return `HTTP ${response.status}: ${msg}.${hint}`;
+    if (!msg) msg = text.slice(0, 300) || response.statusText || t('no_message');
+    const hintKey = `http_${response.status}`;
+    const hint = t(hintKey) !== hintKey ? ` ${t(hintKey)}` : '';
+    return `${t('http_error', { status: response.status, msg })}${hint}`;
   }
 
   function describeFailure(err) {
-    if (err.name === 'AbortError') return err.message === 'stall' ? `Provider nggak ngirim apa-apa selama ${STALL_MS / 1000} detik. Koneksi diputus.` : null;
-    if (err instanceof TypeError) {
-      return 'Request nggak sampai ke provider. Bisa karena internet putus, base URL salah, atau provider nolak request langsung dari browser (CORS).';
-    }
+    if (err.name === 'AbortError') return err.message === 'stall' ? t('stall', { s: STALL_MS / 1000 }) : null;
+    if (err instanceof TypeError) return t('network');
     return err.message || String(err);
   }
 
@@ -856,11 +934,11 @@
       } else if (!acc && stop !== 'aborted') {
         // a 200 with no text is still a failed turn from the user's point of view
         const why = stop && stop !== 'end' ? stopNotice({ stop, stopDetail }).textContent : '';
-        addError(why ? `Nggak ada jawaban. ${why}` : 'Provider nggak ngirim teks apa pun.', { retry: stream });
+        addError(why ? t('no_reply', { why }) : t('no_text'), { retry: stream });
       }
       el.input.focus({ preventScroll: true });
     } else if (failure) {
-      toast(`Jawaban di "${target.title}" gagal: ${failure}`, { duration: 6000 });
+      toast(t('bg_failed', { title: target.title, err: failure }), { duration: 6000 });
     }
     renderHistory();
   }
@@ -881,7 +959,7 @@
 
   function continueReply() {
     if (!chat || controller) return;
-    chat.messages.push({ role: 'user', content: 'Lanjutkan dari bagian yang terpotong, tanpa mengulang yang sudah ditulis.', at: Date.now() });
+    chat.messages.push({ role: 'user', content: t('continue_prompt'), at: Date.now() });
     saveChat(chat);
     renderThread();
     stream();
@@ -891,9 +969,9 @@
 
   // Enough to compare against the dashboard's "sk-...abcd" listing, never the whole key.
   function keyFingerprint(key) {
-    if (!key) return 'kosong';
+    if (!key) return t('fp_empty');
     const head = key.slice(0, Math.min(8, key.length - 4));
-    return `${head}...${key.slice(-4)} (${key.length} karakter)`;
+    return `${head}...${key.slice(-4)} (${t('fp_chars', { n: key.length })})`;
   }
 
   async function testConnection() {
@@ -908,18 +986,18 @@
 
     el.test.setAttribute('aria-busy', 'true');
     el.test.disabled = true;
-    el.test.textContent = 'Mengecek...';
+    el.test.textContent = t('testing');
     setTestResult('', '');
     try {
       const res = await fetch(url, init);
       if (!res.ok) throw new Error(await readError(res));
-      setTestResult('Key diterima. Siap dipakai.', 'ok');
+      setTestResult(t('test_ok'), 'ok');
     } catch (err) {
-      setTestResult(`${describeFailure(err) || 'Gagal.'} Key yang dikirim: ${keyFingerprint(s.apiKey)}.`, 'bad');
+      setTestResult(`${describeFailure(err) || t('failed')} ${t('test_fail_key', { fp: keyFingerprint(s.apiKey) })}`, 'bad');
     } finally {
       el.test.removeAttribute('aria-busy');
       el.test.disabled = false;
-      el.test.textContent = 'Tes koneksi';
+      el.test.textContent = t('test');
     }
   }
 
@@ -927,42 +1005,44 @@
 
   function exportChats() {
     const data = store.exportAll();
-    if (!data.chats.length) { toast('Belum ada obrolan yang bisa diexport.'); return; }
+    if (!data.chats.length) { toast(t('export_none')); return; }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `zpai-obrolan-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `zpai-chats-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast(`${data.chats.length} obrolan diexport.`);
+    toast(t('exported', { n: data.chats.length }));
   }
 
   async function importChats(file) {
     if (!file) return;
     try {
       const text = await file.text();
-      const { added, skipped } = store.importAll(JSON.parse(text));
+      const { added, skipped } = store.importAll(JSON.parse(text), t('untitled'));
       renderHistory();
-      toast(added ? `${added} obrolan diimport${skipped ? `, ${skipped} dilewati` : ''}.` : 'Nggak ada obrolan baru di file itu.');
+      toast(added ? t('imported', { n: added, skipped: skipped ? t('imported_skipped', { n: skipped }) : '' }) : t('import_nothing'));
     } catch (err) {
-      toast(`Import gagal: ${err.message || 'file nggak kebaca'}.`, { duration: 5000 });
+      const key = `err_${err.code || 'unreadable'}`;
+      toast(t('import_fail', { err: t(key) !== key ? t(key) : (err.message || t('err_unreadable')) }), { duration: 5000 });
     }
   }
 
   // ---------- wiring ----------
 
   function init() {
-    fillProviders();
+    const saved = store.settings.get();
+    applyLanguage(saved.lang || i18n.DEFAULT);
     restoreSettings();
     updateStatus();
     syncDrawers();
 
-    store.onQuota(() => toast('Penyimpanan browser penuh. Export lalu hapus obrolan lama.', { duration: 6000 }));
+    store.onQuota(() => toast(t('quota'), { duration: 6000 }));
 
     const s = settings();
-    const migrated = store.chats.migrate({ provider: s.provider, model: s.model });
+    const migrated = store.chats.migrate({ provider: s.provider, model: s.model }, t('untitled'));
     const activeId = migrated?.id || store.chats.activeId();
     chat = (activeId && store.chats.get(activeId)) || store.chats.create({ provider: s.provider, model: s.model });
     if (activeId && !chat.messages.length) store.chats.setActive(null);
@@ -980,6 +1060,7 @@
     for (const f of [el.baseUrl, el.apiKey, el.modelCustom, el.system]) f.addEventListener('input', persistSettings);
     for (const f of [el.remember, el.matchTone]) f.addEventListener('change', persistSettings);
     el.showUsage.addEventListener('change', () => { persistSettings(); renderThread(); });
+    el.language.addEventListener('change', () => switchLanguage(el.language.value));
     el.apiKey.addEventListener('paste', () => {
       setTimeout(() => {
         const clean = el.apiKey.value.replace(/\s+/g, '');
@@ -990,7 +1071,7 @@
       const show = el.apiKey.type === 'password';
       el.apiKey.type = show ? 'text' : 'password';
       el.eye.setAttribute('aria-pressed', String(show));
-      el.eye.setAttribute('aria-label', show ? 'Sembunyikan key' : 'Tampilkan key');
+      el.eye.setAttribute('aria-label', t(show ? 'hide_key' : 'show_key'));
       el.eyeIcon.setAttribute('href', show ? '#i-eye-off' : '#i-eye');
     });
     el.test.addEventListener('click', testConnection);
@@ -1005,11 +1086,12 @@
     el.search.addEventListener('input', renderHistory);
     el.linkSettings.addEventListener('click', () => { openDrawer('settings'); if (!isDrawer('settings')) el.apiKey.focus(); });
 
-    // drawers
-    el.historyBtn.addEventListener('click', () => toggleDrawer('history'));
-    el.settingsBtn.addEventListener('click', () => toggleDrawer('settings'));
+    // panels
+    el.historyBtn.addEventListener('click', () => togglePanel('history'));
+    el.settingsBtn.addEventListener('click', () => togglePanel('settings'));
     el.backdrop.addEventListener('click', () => closeDrawer());
     for (const b of document.querySelectorAll('.drawer-close')) b.addEventListener('click', () => closeDrawer());
+    for (const b of document.querySelectorAll('.panel-collapse')) b.addEventListener('click', () => setCollapsed(b.dataset.collapse, true));
     SETTINGS_DRAWER.addEventListener('change', syncDrawers);
     HISTORY_DRAWER.addEventListener('change', syncDrawers);
 
@@ -1028,15 +1110,14 @@
     el.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
-        if (controller) { flashHint('Tunggu jawaban selesai, atau tekan Esc buat stop.'); return; }
+        if (controller) { flashHint(t('hint_wait')); return; }
         el.composer.requestSubmit();
       }
     });
 
     el.thread.addEventListener('scroll', updateJump, { passive: true });
     el.jump.addEventListener('click', () => {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      el.thread.scrollTo({ top: el.thread.scrollHeight, behavior: reduce ? 'instant' : 'smooth' });
+      el.thread.scrollTo({ top: el.thread.scrollHeight, behavior: REDUCE_MOTION.matches ? 'instant' : 'smooth' });
     });
 
     document.addEventListener('keydown', (e) => {

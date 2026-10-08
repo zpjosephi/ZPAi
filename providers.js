@@ -49,18 +49,19 @@ window.ZP = window.ZP || {};
       models: ['openai/gpt-5-mini', 'anthropic/claude-sonnet-5-5', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
     },
     custom: {
-      name: 'Lainnya (OpenAI-compatible)',
+      // name and placeholder come from the i18n dictionary
+      name: 'Other (OpenAI-compatible)',
+      nameKey: 'provider_custom',
       kind: 'openai',
       base: '',
       keyUrl: '',
-      placeholder: 'key (boleh kosong buat Ollama)',
+      placeholder: 'key',
+      placeholderKey: 'custom_key_ph',
       models: [],
       editableBase: true,
       optionalKey: true,
     },
   };
-
-  const TONE_NOTE = 'Sesuaikan nada dan pilihan kata dengan cara pengguna menulis. Kalau pengguna santai, jawab santai; kalau formal, jawab formal; kalau pakai bahasa tertentu, pakai bahasa yang sama.';
 
   const ANTHROPIC_MAX_TOKENS = 16384;
 
@@ -69,10 +70,11 @@ window.ZP = window.ZP || {};
     return (p.editableBase ? s.baseUrl : p.base).replace(/\/+$/, '');
   }
 
+  // s.toneNote is the localized "mirror the user's tone" instruction
   function composeSystem(s) {
     const parts = [];
     if (s.system) parts.push(s.system);
-    if (s.matchTone) parts.push(TONE_NOTE);
+    if (s.matchTone && s.toneNote) parts.push(s.toneNote);
     return parts.join('\n\n');
   }
 

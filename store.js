@@ -79,11 +79,18 @@ window.ZP = window.ZP || {};
 
   // ---------- chats ----------
 
-  function titleFrom(text) {
+  function titleFrom(text, fallback) {
     const line = String(text || '').split('\n').find((l) => l.trim()) || '';
     const clean = line.replace(/[#*`_>~[\]]/g, '').replace(/\s+/g, ' ').trim();
-    if (!clean) return 'Obrolan baru';
+    if (!clean) return fallback || 'New chat';
     return clean.length > TITLE_MAX ? `${clean.slice(0, TITLE_MAX - 1).trimEnd()}...` : clean;
+  }
+
+  // errors carry a code so the UI can translate them
+  function fail(code) {
+    const err = new Error(code);
+    err.code = code;
+    return err;
   }
 
   function readIndex() {
@@ -125,10 +132,10 @@ window.ZP = window.ZP || {};
 
     // Saves the body and keeps the index entry in step. Empty chats are not
     // written at all so "new chat" never litters the list.
-    save(chat) {
+    save(chat, untitled) {
       if (!chat.messages.length) return true;
       chat.updatedAt = Date.now();
-      if (!chat.title) chat.title = titleFrom(chat.messages.find((m) => m.role === 'user')?.content);
+      if (!chat.title) chat.title = titleFrom(chat.messages.find((m) => m.role === 'user')?.content, untitled);
       if (!writeJSON(K.chat(chat.id), chat)) return false;
       const idx = readIndex().filter((e) => e.id !== chat.id);
       idx.push(entryFor(chat));
@@ -181,7 +188,7 @@ window.ZP = window.ZP || {};
 
     // First-release layout kept a single thread under one key. Fold it into
     // the new per-chat layout once, then drop the old key.
-    migrate(fallback) {
+    migrate(fallback, untitled) {
       const old = readJSON(K.legacyThread, null);
       if (!Array.isArray(old)) return null;
       remove(K.legacyThread);
@@ -191,7 +198,7 @@ window.ZP = window.ZP || {};
       const who = msgs.find((m) => m.role === 'assistant')?.who;
       if (who) chat.model = who;
       chat.messages = msgs.map((m) => ({ role: m.role, content: m.content, model: m.who || undefined, at: chat.createdAt }));
-      chats.save(chat);
+      chats.save(chat, untitled);
       return chat;
     },
   };
@@ -232,17 +239,17 @@ window.ZP = window.ZP || {};
 
   // Existing ids are kept, incoming duplicates are skipped. Returns counts so
   // the UI can say exactly what happened.
-  function importAll(data) {
+  function importAll(data, untitled) {
     const list = Array.isArray(data) ? data : data?.chats;
-    if (!Array.isArray(list)) throw new Error('bukan file export ZPAi');
+    if (!Array.isArray(list)) throw fail('not_export');
     const have = new Set(readIndex().map((e) => e.id));
     let added = 0; let skipped = 0;
     for (const raw of list) {
       const chat = sanitizeChat(raw);
       if (!chat) { skipped++; continue; }
       if (have.has(chat.id)) { skipped++; continue; }
-      if (!chat.title) chat.title = titleFrom(chat.messages.find((m) => m.role === 'user')?.content);
-      if (!chats.restore(chat)) throw new Error('penyimpanan browser penuh');
+      if (!chat.title) chat.title = titleFrom(chat.messages.find((m) => m.role === 'user')?.content, untitled);
+      if (!chats.restore(chat)) throw fail('quota');
       have.add(chat.id);
       added++;
     }
