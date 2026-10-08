@@ -1,11 +1,20 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>ZPAi</title>
-  <meta name="description" content="Chat ke OpenAI, Anthropic, Gemini, Groq, atau endpoint OpenAI-compatible pakai API key sendiri. Tanpa server, langsung dari browser.">
+  <meta name="description" content="Chat ke OpenAI, Anthropic, Gemini, Groq, OpenRouter, atau endpoint OpenAI-compatible pakai API key sendiri. Tanpa server, langsung dari browser.">
+  <script>
+    // theme has to land before first paint or the page flashes white in dark mode
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('zpai.settings') || '{}');
+        if (s.theme === 'light' || s.theme === 'dark') document.documentElement.dataset.theme = s.theme;
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,46 +22,143 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23b32a78'/%3E%3Ccircle cx='11' cy='16' r='2.4' fill='white'/%3E%3Ccircle cx='21' cy='16' r='2.4' fill='white'/%3E%3C/svg%3E">
 </head>
 <body>
+  <svg hidden aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 20 20"><path d="M3 6h9M15 6h2M3 14h3M9 14h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="13.5" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="14" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 20 20"><path d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 17h6M10 13.5V17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-search" viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13.2 13.2 17 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 20 20"><path d="m3.5 16.5 1-4L13.6 3.4a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L7.5 15.5l-4 1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m12 5 3 3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10h7.4l.8-10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 20 20"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 20 20"><path d="m4 10.5 4 4 8-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 20 20"><path d="M16 9A6 6 0 0 0 5.3 6.3M4 11a6 6 0 0 0 10.7 2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 3v3.5h3.5M16 17v-3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-send" viewBox="0 0 20 20"><path d="M3 10h13M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/></symbol>
+      <symbol id="i-download" viewBox="0 0 20 20"><path d="M10 3v10M6 9.5l4 4 4-4M4 16.5h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 20 20"><path d="M10 13V3M6 6.5l4-4 4 4M4 16.5h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 20 20"><path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 20 20"><path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 16 16 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 20 20"><path d="M10 4v12M5 11l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 20 20"><path d="M6 8l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
+
   <a class="skip" href="#composer-input">Langsung ke kotak pesan</a>
 
   <header class="top">
-    <div class="top-brand">
-      <span class="top-mark" aria-hidden="true"></span>
-      <span class="top-name">ZPAi</span>
+    <div class="top-left">
+      <button type="button" class="btn-icon drawer-toggle" id="btn-history" aria-expanded="false" aria-controls="history" aria-label="Buka daftar obrolan">
+        <svg aria-hidden="true" width="20" height="20"><use href="#i-menu"/></svg>
+      </button>
+      <div class="top-brand">
+        <span class="top-mark" aria-hidden="true"></span>
+        <span class="top-name">ZPAi</span>
+      </div>
     </div>
     <p class="top-status" id="top-status" aria-live="polite">Belum ada key</p>
     <div class="top-actions">
-      <button type="button" class="btn btn-ghost" id="btn-new">Obrolan baru</button>
-      <button type="button" class="btn btn-ghost rail-toggle" id="btn-rail" aria-expanded="false" aria-controls="rail">
-        <svg aria-hidden="true" viewBox="0 0 20 20" width="16" height="16"><path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        Pengaturan
+      <button type="button" class="btn-icon" id="btn-theme" aria-label="Tema: ikut sistem" title="Ganti tema">
+        <svg aria-hidden="true" width="20" height="20"><use id="theme-icon" href="#i-monitor"/></svg>
+      </button>
+      <button type="button" class="btn-icon drawer-toggle" id="btn-settings" aria-expanded="false" aria-controls="settings" aria-label="Buka pengaturan">
+        <svg aria-hidden="true" width="20" height="20"><use href="#i-sliders"/></svg>
       </button>
     </div>
   </header>
 
-  <div class="app">
-    <aside class="rail" id="rail">
-      <form class="rail-form" id="settings" autocomplete="off">
+  <div class="app" id="app">
+    <aside class="panel panel-history" id="history" aria-label="Daftar obrolan">
+      <div class="panel-head">
+        <h2 class="panel-title">Obrolan</h2>
+        <button type="button" class="btn-icon drawer-close" data-close="history" aria-label="Tutup daftar obrolan">
+          <svg aria-hidden="true" width="20" height="20"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="history-tools">
+        <button type="button" class="btn btn-primary btn-new" id="btn-new">
+          <svg aria-hidden="true" width="18" height="18"><use href="#i-plus"/></svg>
+          Obrolan baru
+        </button>
+        <div class="search">
+          <svg class="search-ico" aria-hidden="true" width="18" height="18"><use href="#i-search"/></svg>
+          <label class="sr-only" for="history-search">Cari obrolan</label>
+          <input id="history-search" type="search" placeholder="Cari obrolan" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <nav class="history-list" id="history-list" aria-label="Obrolan tersimpan"></nav>
+      <p class="history-empty" id="history-empty">Belum ada obrolan tersimpan. Pesan pertama kamu bakal muncul di sini.</p>
+    </aside>
+
+    <main class="chat" id="chat">
+      <ol class="thread" id="thread" aria-live="polite" aria-relevant="additions text"></ol>
+
+      <section class="empty" id="empty">
+        <h1>Chat pakai key sendiri.</h1>
+        <ol class="steps">
+          <li>Pilih provider dan tempel API key di <button type="button" class="link-btn" id="link-settings">Pengaturan</button>.</li>
+          <li>Pilih model. Kalau nggak ada di daftar, pilih "Model lain" dan ketik ID-nya.</li>
+          <li>Tulis pesan. Enter buat kirim, Shift+Enter buat baris baru.</li>
+        </ol>
+        <p class="empty-note">Riwayat obrolan dan key disimpan di browser ini saja. Key cuma dikirim ke provider yang kamu pilih.</p>
+      </section>
+
+      <button type="button" class="btn-jump" id="btn-jump" hidden aria-label="Lompat ke pesan terbaru">
+        <svg aria-hidden="true" width="18" height="18"><use href="#i-arrow-down"/></svg>
+      </button>
+
+      <form class="composer" id="composer">
+        <div class="composer-banner" id="edit-banner" hidden>
+          <span>Mengedit pesan terakhir. Jawaban setelahnya bakal diganti.</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-cancel">Batal</button>
+        </div>
+        <div class="composer-row">
+          <label class="sr-only" for="composer-input">Pesan</label>
+          <textarea id="composer-input" rows="1" placeholder="Tulis pesan..." required></textarea>
+          <button type="submit" class="btn btn-primary btn-send" id="btn-send" aria-label="Kirim">
+            <svg class="ico-send" aria-hidden="true" width="18" height="18"><use href="#i-send"/></svg>
+            <svg class="ico-stop" aria-hidden="true" width="18" height="18"><use href="#i-stop"/></svg>
+          </button>
+        </div>
+        <p class="composer-hint" id="composer-hint">Enter kirim, Shift+Enter baris baru, Esc stop.</p>
+      </form>
+    </main>
+
+    <aside class="panel panel-settings" id="settings" aria-label="Pengaturan">
+      <div class="panel-head">
+        <h2 class="panel-title">Pengaturan</h2>
+        <button type="button" class="btn-icon drawer-close" data-close="settings" aria-label="Tutup pengaturan">
+          <svg aria-hidden="true" width="20" height="20"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <div class="settings-form" id="settings-form">
         <div class="field">
           <label for="provider">Provider</label>
-          <select id="provider" name="provider"></select>
+          <div class="select-wrap">
+            <select id="provider" name="provider"></select>
+          </div>
         </div>
 
         <div class="field" id="field-base" hidden>
           <label for="baseUrl">Base URL</label>
-          <input id="baseUrl" name="baseUrl" type="url" inputmode="url" placeholder="https://host/v1" spellcheck="false">
+          <input id="baseUrl" name="baseUrl" type="url" inputmode="url" placeholder="https://host/v1" spellcheck="false" autocomplete="off">
           <p class="hint">Endpoint yang ngikutin format OpenAI (Ollama, LM Studio, DeepSeek, Together, dll).</p>
         </div>
 
         <div class="field">
           <label for="apiKey">API key</label>
           <div class="key-wrap">
-            <input id="apiKey" name="apiKey" type="password" placeholder="sk-..." spellcheck="false" autocapitalize="off" autocomplete="off">
+            <input id="apiKey" name="apiKey" type="password" placeholder="sk-..." spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="key-hint">
             <button type="button" class="btn-icon" id="btn-eye" aria-label="Tampilkan key" aria-pressed="false">
-              <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path class="eye-open" d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle class="eye-open" cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/><path class="eye-slash" d="M4 16 16 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg aria-hidden="true" width="18" height="18"><use id="eye-icon" href="#i-eye"/></svg>
             </button>
           </div>
-          <p class="hint" id="key-hint">Key cuma dipakai dari browser ini ke provider. Nggak lewat server mana pun. <a id="key-link" href="#" target="_blank" rel="noopener">Bikin key</a></p>
+          <p class="hint" id="key-hint">Dikirim langsung dari browser ini ke provider, nggak lewat server lain. <a id="key-link" href="#" target="_blank" rel="noopener">Bikin key</a></p>
           <label class="check">
             <input type="checkbox" id="remember" name="remember">
             <span>Ingat key di browser ini</span>
@@ -61,59 +167,98 @@
 
         <div class="field">
           <label for="model">Model</label>
-          <input id="model" name="model" list="model-list" placeholder="ketik atau pilih" spellcheck="false" autocapitalize="off">
-          <datalist id="model-list"></datalist>
+          <div class="select-wrap">
+            <select id="model" name="model"></select>
+          </div>
+          <input id="model-custom" name="modelCustom" type="text" placeholder="ID model, misal gpt-4.1" spellcheck="false" autocapitalize="off" autocomplete="off" hidden aria-label="ID model">
         </div>
 
         <div class="field">
           <label for="system">Instruksi sistem <span class="opt">opsional</span></label>
           <textarea id="system" name="system" rows="3" placeholder="Misal: jawab singkat, pakai bahasa Indonesia."></textarea>
+          <label class="check">
+            <input type="checkbox" id="match-tone" name="matchTone">
+            <span>Sesuaikan gaya bahasa dengan cara saya menulis</span>
+          </label>
+          <p class="hint">Model diminta ngikutin nada kamu: santai dibalas santai, formal dibalas formal.</p>
         </div>
 
-        <div class="rail-foot">
+        <div class="settings-foot">
           <button type="button" class="btn" id="btn-test">Tes koneksi</button>
           <p class="test-result" id="test-result" role="status"></p>
         </div>
-      </form>
+
+        <hr class="divider">
+
+        <div class="field">
+          <span class="field-label" id="label-display">Tampilan</span>
+          <label class="check">
+            <input type="checkbox" id="show-usage" name="showUsage">
+            <span>Tampilkan pemakaian token di bawah jawaban</span>
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Data</span>
+          <div class="btn-row">
+            <button type="button" class="btn" id="btn-export">
+              <svg aria-hidden="true" width="18" height="18"><use href="#i-download"/></svg>
+              Export obrolan
+            </button>
+            <button type="button" class="btn" id="btn-import">
+              <svg aria-hidden="true" width="18" height="18"><use href="#i-upload"/></svg>
+              Import
+            </button>
+            <input type="file" id="import-file" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true">
+          </div>
+          <p class="hint" id="data-hint">File JSON berisi semua obrolan, tanpa API key.</p>
+          <button type="button" class="btn btn-danger" id="btn-clear">Hapus semua obrolan</button>
+        </div>
+      </div>
     </aside>
 
-    <main class="chat">
-      <ol class="thread" id="thread" aria-live="polite" aria-relevant="additions text"></ol>
+    <div class="backdrop" id="backdrop" hidden></div>
+  </div>
 
-      <section class="empty" id="empty">
-        <h1>Chat pakai key sendiri.</h1>
-        <ol class="steps">
-          <li>Pilih provider, tempel API key di panel kiri.</li>
-          <li>Pilih model. Kalau nggak ada di daftar, ketik aja.</li>
-          <li>Tulis pesan. Enter buat kirim, Shift+Enter buat baris baru.</li>
-        </ol>
-        <p class="empty-note">Riwayat obrolan disimpan di browser ini doang. Key nggak pernah dikirim ke mana pun selain ke provider yang lu pilih.</p>
-      </section>
-
-      <form class="composer" id="composer">
-        <label class="sr-only" for="composer-input">Pesan</label>
-        <textarea id="composer-input" rows="1" placeholder="Tulis pesan..." required></textarea>
-        <button type="submit" class="btn btn-primary btn-send" id="btn-send" aria-label="Kirim">
-          <svg class="ico-send" aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M3 10h13M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <svg class="ico-stop" aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><rect x="5" y="5" width="10" height="10" rx="1.5" fill="currentColor"/></svg>
-        </button>
-        <p class="composer-hint" id="composer-hint">Enter kirim, Shift+Enter baris baru, Esc stop.</p>
-      </form>
-    </main>
+  <div class="toast" id="toast" role="status" hidden>
+    <span class="toast-text" id="toast-text"></span>
+    <button type="button" class="btn btn-ghost btn-sm" id="toast-action" hidden></button>
   </div>
 
   <template id="tpl-msg">
     <li class="msg">
       <div class="msg-head">
         <span class="msg-who"></span>
-        <button type="button" class="btn-icon msg-copy" aria-label="Salin jawaban" hidden>
-          <svg aria-hidden="true" viewBox="0 0 20 20" width="16" height="16"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
-        </button>
+        <span class="msg-time"></span>
       </div>
       <div class="msg-body"></div>
+      <div class="msg-foot">
+        <span class="msg-usage"></span>
+        <div class="msg-actions"></div>
+      </div>
     </li>
   </template>
 
+  <template id="tpl-chat-item">
+    <div class="chat-item">
+      <button type="button" class="chat-open" aria-label="Buka obrolan">
+        <span class="chat-title"></span>
+        <span class="chat-meta"></span>
+      </button>
+      <div class="chat-tools">
+        <button type="button" class="btn-icon chat-rename" aria-label="Ganti nama">
+          <svg aria-hidden="true" width="18" height="18"><use href="#i-pencil"/></svg>
+        </button>
+        <button type="button" class="btn-icon chat-delete" aria-label="Hapus">
+          <svg aria-hidden="true" width="18" height="18"><use href="#i-trash"/></svg>
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <script src="markdown.js"></script>
+  <script src="providers.js"></script>
+  <script src="store.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
